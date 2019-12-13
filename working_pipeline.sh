@@ -18,7 +18,7 @@ FASTA_DIRECTORY="/wynton/group/lynch/kmccauley/01_raw/test_dir/"
 ######## All variables beyond this point do not need to be set.
 software_location="/wynton/group/lynch/kmccauley/mySoftware" ## Making a variable now in the event that this location changes.
 
-FASTQC_OUT_1="FastQ_Out_1"
+FASTQC_OUT_1="FastQC_Out_1"
 FASTQC_RAW_1="$TMPDIR"
 
 ## Define Temporary Directory Location (as scratchspace).
@@ -53,13 +53,11 @@ run_fastqc () {
                 -t $fastqc_threads \
                 "${f}" \
                 --nogroup \
-                --outdir "${TMPDIR}"/"FASTQC_Results/" \
+                --outdir "${FASTQC_OUT_1}" \
                 --dir "${TMPDIR}"
         echo "Finished running FastQC on" $f
         done
 }
-
-mv ${TMPDIR}/"FASTQC_Results" "${FASTA_DIRECTORY}/${FASTQC_OUT_1}"
 
 # Definiting Output Directory names and creating said directories
 BBDUK_DIR="bbduk_ReadCleaning_Output"
