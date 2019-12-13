@@ -7,8 +7,6 @@
 #$ -m bae
 #$ -M kathryn.mccauley@ucsf.edu
 
-## This version will be used for testing of code (fasta_directory points to a directory with only one sample in it). Parts that are working will be moved to the "combine_scripts.sh".
-
 ## Metagenomics Pipeline
 ## Current Version Written by Katie McCauley, 25 Nov 2019 with Ariane Panzer; last revised 03 Dec 2019
 
@@ -18,7 +16,7 @@ FASTA_DIRECTORY="/wynton/group/lynch/kmccauley/01_raw/test_dir/"
 
 
 ######## All variables beyond this point do not need to be set.
-
+software_location="/wynton/group/lynch/kmccauley/mySoftware" ## Making a variable now in the event that this location changes.
 
 FASTQC_OUT_1="FastQ_Out_1"
 FASTQC_RAW_1="$TMPDIR"
@@ -30,9 +28,8 @@ if [[ -z "$TMPDIR" ]]; then
   export TMPDIR
 fi
 
-save_cwd=$PWD
-echo "Current working directory is" $save_cwd
-
+## I decided that the current working directory isn't where the data should go in the end. Rather it will be a directory where the fastq files live
+echo "Final files will be saved to" $FASTA_DIRECTORY
 
 cd $TMPDIR
 
@@ -67,7 +64,7 @@ mv ${TMPDIR}/"FASTQC_Results" "${FASTA_DIRECTORY}/${FASTQC_OUT_1}"
 # Definiting Output Directory names and creating said directories
 BBDUK_DIR="bbduk_ReadCleaning_Output"
 TRIMMED_DIR="AdapterTrimming"
-HUMAN_DIR="HumanReads"
+HUMAN_DIR="HumanFiltering"
 PhiX_DIR="PhiXRemoval"
 QualFilt_DIR="QualitySeqs"
 
@@ -77,6 +74,7 @@ mkdir -p "${BBDUK_DIR}"/"${HUMAN_DIR}"
 mkdir -p "${BBDUK_DIR}"/"${TRIMMED_DIR}"
 
 ## Possibly useful parameters to look into and determine what should go up at the top.
+
 MEMORY="-Xmx40g"
 PARAMETERS_ADAPT_TRIM="ktrim=r k=23 mink=11 hdist=1" # can also include tbo (trim adapters based on pair overlap detection using BBMerge [which does not require known adapter sequnces]) or tpe (specifies to trim both reads to the same length in the event that an adapter kmer was only detected in one of them)
 
@@ -89,7 +87,7 @@ echo "Running BBDuk on" $f ";" "${f/_R1/_R2}" "exists."
 
 echo "Adapter trimming for" $f
 ## Adapter Trimming
-singularity exec /wynton/group/lynch/kmccauley/mySoftware/bbtools.img bbduk.sh \
+singularity exec ${software_location}/bbtools.img bbduk.sh \
 "${MEMORY}" \
 threads=$bbduk_threads \
 in1=$f \
@@ -101,7 +99,7 @@ ref=/bbmap/resources/adapters.fa \
 
 echo "PhiX removal for" $f
 ## PhiX Removal
-singularity exec /wynton/group/lynch/kmccauley/mySoftware/bbtools.img bbduk.sh \
+singularity exec ${software_location}/bbtools.img bbduk.sh \
 "${MEMORY}" \
 threads=$bbduk_threads \
 in1="${BBDUK_DIR}"/"${TRIMMED_DIR}"/"${f/_R1/_R1_adapt_trim}" \
@@ -113,7 +111,7 @@ k=31 hdist=1 stats=stats.txt
 
 echo "Quality Filtering for" $f
 ## Quality Filtering/Trimming
-singularity exec /wynton/group/lynch/kmccauley/mySoftware/bbtools.img bbduk.sh \
+singularity exec ${software_location}/bbtools.img bbduk.sh \
 "${MEMORY}" \
 threads=$bbduk_threads \
 in1="${BBDUK_DIR}"/"${PhiX_DIR}"/"${f/_R1/_R1_remPhiX}" \
@@ -123,7 +121,7 @@ out2="${BBDUK_DIR}"/"${QualFilt_DIR}"/"${f/_R1/_R2_qTrim}" \
 k=27 hdist=1 qtrim=rl trimq=17 cardinality=t
 
 echo "Human Removal for" $f
-singularity exec -B "/wynton/group/lynch/kmccauley/mySoftware:/mnt" /wynton/group/lynch/kmccauley/mySoftware/bbtools.img bbmap.sh \
+singularity exec -B "${software_location}:/mnt" ${software_location}/bbtools.img bbmap.sh \
 "${MEMORY}" \
 threads=$bbduk_threads \
 in="${BBDUK_DIR}"/"${QualFilt_DIR}"/"${f/_R1/_R1_qTrim}" \
@@ -167,36 +165,61 @@ else
         run_bbtools
 fi 
 
+## Set up Code for MIDAS, which I think I'm going to try to parallelize in the same way like I did for QC and BBtools
+run_midas() {
+for f in $ files; do
+if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
+
+. ${software_location}/metagenomics_midas2/bin/activate
+
+run_midas.py species ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
+run_midas.py genes ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
+run_midas.py snps ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
+
+deactivate
+fi
+done
+}
 
 
-## Generate contigs, using SPAdes. Need to figure out why MIDAS isn't working (and what MIDAS uses as input) -- both are having installation troubles.
-# Also, there was discussion of pulling down genomes based on OTU table sequences, and using that as reference. Won't be helpful for my study, but something to figure out how to implement through Wynton and Unix. Would this be better executed by using a fasta file to find matches to all OTUs at 97% identity? Or use the names in the OTU taxonomies to pull, say, all genomes belonging to the tagged genus. Capabilities for the latter are there, but the former is going to require more work. Theoretically, it can be done with BLAST or SILVA using their GUIs, but it would be nice to be able to do this from the command line.
+
+## Determine how we want to download our own database.
 
 ## Just some points for discussion/thought...
 
-#Pulling some sequences using BLAST, but need to find something that works on the command line, and only requires a fasta file for input.
-
 # This setting of the PATH variable works:
-export PATH=$PATH:/wynton/group/lynch/kmccauley/mySoftware/SPAdes-3.11.1-Linux/bin/
-## spades.py --test ## successfully executes.
+export PATH=$PATH:${software_location}/SPAdes-3.11.1-Linux/bin/
 
 ## try spades on the one sample:
-mkdir spades_contig_output
+mkdir metaspades_results
 
 make_contigs() {
 for f in $ files; do
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
 
+## Would I flash-assemble here or consider doing that above, after QC but before running MIDAS
+
 metaspades.py -k 21,33,55,77 \   ## Check for something that allows for combination of the R1 and R2.
 -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
 -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
--o spades_contig_output/"${f/_R1/_contig_dat}"
+-o metaspades_results/"${f/_R1/_contig_dat}" \
+-t $metaspades_threads
 
 fi
 done
 }
 
+        let cores=$NSLOTS
+        let midas_threads=cores/2
+        let metaspades_threads=cores-midas_threads
+
+        echo $NSLOTS "cores detected; running MIDAS (genes/snps/species) on" `expr $midas_threads` "core(s) & MetaSPAdes on" $metaspades_threads "core(s)"
+        run_midas &
+        make_contigs &
+
 make_contigs
 
-mkdir -r "$save_cwd"/final_results/
-mv $TMPDIR "$save_cwd"/final_results/
+## Adding a job ID and date to the name of the directory that gets saved.
+currdate=`date +%m%d%Y`
+mkdir -p "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
+mv -r $TMPDIR "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
