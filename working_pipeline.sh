@@ -2,8 +2,8 @@
 #$ -cwd
 #$ -pe smp 4
 #$ -l mem_free=20G
-#$ -l h_rt=08:00:00
-#$ -l s_rt=08:00:00
+#$ -l h_rt=04:00:00
+#$ -l s_rt=04:00:00
 #$ -m bae
 #$ -M kathryn.mccauley@ucsf.edu
 
@@ -28,6 +28,8 @@ if [[ -z "$TMPDIR" ]]; then
   export TMPDIR
 fi
 
+echo "Temoprary files are saved to" $TMPDIR "(in the event that your run fails before completing)"
+
 ## I decided that the current working directory isn't where the data should go in the end. Rather it will be a directory where the fastq files live
 echo "Final files will be saved to" $FASTA_DIRECTORY
 
@@ -45,6 +47,9 @@ module list
 
 ## Instead of running files ending in fastq, some files will also end in fastq.gz. Therefore, I am creating a variable called `files` that identifies any file in the FASTA_DRECTORY that includes ".fastq", which will include both ".fastq" files and ".fastq.gz" files.
 files=`ls | grep "[.]fastq"` # Gets any file in the directory with fastq in the name.
+
+
+## Determine how to cat files that are from different lanes.
 
 run_fastqc () {
         for f in $files; do
@@ -195,7 +200,7 @@ make_contigs() {
 for f in $ files; do
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
 
-## Would I flash-assemble here or consider doing that above, after QC but before running MIDAS
+## Would I flash-assemble (Elze recommended VSEARCH) here or consider doing that above, after QC but before running MIDAS
 
 metaspades.py -k 21,33,55,77 \   ## Check for something that allows for combination of the R1 and R2.
 -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
@@ -220,4 +225,4 @@ make_contigs
 ## Adding a job ID and date to the name of the directory that gets saved.
 currdate=`date +%m%d%Y`
 mkdir -p "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
-mv -r $TMPDIR "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
+mv $TMPDIR "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
