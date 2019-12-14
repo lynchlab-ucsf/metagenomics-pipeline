@@ -163,7 +163,7 @@ if [[ $NSLOTS -gt 3 ]]; then
 	echo $NSLOTS "cores detected; running FastQC on" `expr $NSLOTS - $bbduk_threads` "core(s) & quality processing on" ${bbduk_threads} "core(s)"
         run_fastqc &
         run_bbtools &
-        wait ## This will wait for the two functions above to complete before continuing on.
+        wait ${!} ## This will wait for the two functions above to complete before continuing on.
 else
 	let fastqc_threads=$NSLOTS
 	let bbduk_threads=$NSLOTS
@@ -174,14 +174,16 @@ fi
 
 ## Set up Code for MIDAS, which I think I'm going to try to parallelize in the same way like I did for QC and BBtools
 run_midas() {
-for f in $ files; do
+for f in $files; do
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
 echo "Running MIDAS"
+
 . ${software_location}/metagenomics_midas2/bin/activate
 
-run_midas.py species ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
-run_midas.py genes ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
-run_midas.py snps ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
+run_midas.py species ./MIDAS_$f -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" -t $NSLOTS
+run_midas.py genes ./MIDAS_$f -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/${f/_R1/_R2_clean} -t $NSLOTS
+run_midas.py snps ./MIDAS_$f -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/${f/_R1/_R2_clean} -t $NSLOTS
+
 echo "End MIDAS"
 deactivate
 fi
@@ -201,7 +203,7 @@ export PATH=$PATH:${software_location}/SPAdes-3.11.1-Linux/bin/
 mkdir metaspades_results
 
 make_contigs() {
-for f in $ files; do
+for f in $files; do
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
 
 ## Would I flash-assemble (Elze recommended VSEARCH) here or consider doing that above, after QC but before running MIDAS
@@ -210,18 +212,14 @@ metaspades.py -k 21,33,55,77 \   ## Check for something that allows for combinat
 -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
 -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
 -o metaspades_results/"${f/_R1/_contig_dat}" \
--t $metaspades_threads
+-t $NSLOTS
 echo "Done with metaSPAdes"
 fi
 done
 }
 
-        let cores=$NSLOTS
-        let midas_threads=cores
-        let metaspades_threads=cores
-
-	run_midas
-        make_contigs
+run_midas
+make_contigs
 
 echo "PIPELINE COMPLETE!!!"
 
