@@ -1,9 +1,9 @@
 #!/usr/bin/bash
 #$ -cwd
-#$ -pe smp 4
+#$ -pe smp 8
 #$ -l mem_free=20G
-#$ -l h_rt=04:00:00
-#$ -l s_rt=04:00:00
+#$ -l h_rt=08:00:00
+#$ -l s_rt=08:00:00
 #$ -m bae
 #$ -M kathryn.mccauley@ucsf.edu
 
@@ -28,7 +28,7 @@ if [[ -z "$TMPDIR" ]]; then
   export TMPDIR
 fi
 
-echo "Temoprary files are saved to" $TMPDIR "(in the event that your run fails before completing)"
+echo "Temporary directory is" $TMPDIR "on" $HOSTNAME ", which will be deleted automatically when the job terminates"
 
 ## I decided that the current working directory isn't where the data should go in the end. Rather it will be a directory where the fastq files live
 echo "Final files will be saved to" $FASTA_DIRECTORY
@@ -49,7 +49,11 @@ module list
 files=`ls | grep "[.]fastq"` # Gets any file in the directory with fastq in the name.
 
 
+## Now that we have the file names, determine where overlaps in *lanes* exist within samples, which may be easier to do if I'm able to pull in a .txt file....
+## I'm still playing around with how I want to do this... My brain isn't working at its best right now....
+
 ## Determine how to cat files that are from different lanes.
+
 
 run_fastqc () {
         for f in $files; do
@@ -172,13 +176,13 @@ fi
 run_midas() {
 for f in $ files; do
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
-
+echo "Running MIDAS"
 . ${software_location}/metagenomics_midas2/bin/activate
 
 run_midas.py species ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
 run_midas.py genes ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
 run_midas.py snps ./MIDAS_$f -1 ${f} -2 ${f/_R1/_R2} -t $midas_threads
-
+echo "End MIDAS"
 deactivate
 fi
 done
@@ -201,28 +205,27 @@ for f in $ files; do
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
 
 ## Would I flash-assemble (Elze recommended VSEARCH) here or consider doing that above, after QC but before running MIDAS
-
+echo "Running metaSPAdes"
 metaspades.py -k 21,33,55,77 \   ## Check for something that allows for combination of the R1 and R2.
 -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
 -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
 -o metaspades_results/"${f/_R1/_contig_dat}" \
 -t $metaspades_threads
-
+echo "Done with metaSPAdes"
 fi
 done
 }
 
         let cores=$NSLOTS
-        let midas_threads=cores/2
-        let metaspades_threads=cores-midas_threads
+        let midas_threads=cores
+        let metaspades_threads=cores
 
-        echo $NSLOTS "cores detected; running MIDAS (genes/snps/species) on" `expr $midas_threads` "core(s) & MetaSPAdes on" $metaspades_threads "core(s)"
-        run_midas &
-        make_contigs &
+	run_midas
+        make_contigs
 
-make_contigs
+echo "PIPELINE COMPLETE!!!"
 
 ## Adding a job ID and date to the name of the directory that gets saved.
 currdate=`date +%m%d%Y`
-mkdir -p "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
-mv $TMPDIR "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
+mkdir "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
+mv $TMPDIR/* "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
