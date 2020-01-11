@@ -1,9 +1,9 @@
 #!/usr/bin/bash
 #$ -cwd
-#$ -pe smp 8
+#$ -pe smp 15
 #$ -l mem_free=20G
-#$ -l h_rt=08:00:00
-#$ -l s_rt=08:00:00
+#$ -l h_rt=48:00:00
+#$ -l s_rt=48:00:00
 #$ -m bae
 #$ -M kathryn.mccauley@ucsf.edu
 
@@ -11,27 +11,26 @@
 ## Current Version Written by Katie McCauley, 25 Nov 2019 with Ariane Panzer; last revised 03 Dec 2019
 
 # Where do your metagenomics fastq files live?
-FASTA_DIRECTORY="/wynton/group/lynch/kmccauley/01_raw/test_dir/"
-
-
+FASTA_DIRECTORY="/wynton/group/lynch/kmccauley/01_raw/"
 
 ######## All variables beyond this point do not need to be set.
 software_location="/wynton/group/lynch/kmccauley/mySoftware" ## Making a variable now in the event that this location changes.
 
-FASTQC_OUT_1="FastQC_Out_1"
-FASTQC_RAW_1="$TMPDIR"
-
-## Define Temporary Directory Location (as scratchspace).
+## Define Temporary Directory location (in scratch directory). Not using node-specific scratch space
 if [[ -z "$TMPDIR" ]]; then
   if [[ -d /scratch ]]; then TMPDIR=/scratch/$USER; else TMPDIR=/tmp/$USER; fi
   mkdir -p "$TMPDIR"
   export TMPDIR
 fi
 
-echo "Temporary directory is" $TMPDIR "on" $HOSTNAME ", which will be deleted automatically when the job terminates"
+FASTQC_OUT_1="FastQC_Out_1"
+FASTQC_RAW_1="$TMPDIR"
 
-## I decided that the current working directory isn't where the data should go in the end. Rather it will be a directory where the fastq files live
-echo "Final files will be saved to" $FASTA_DIRECTORY
+echo "Temporary directory is" $TMPDIR ", which will be deleted upon completion of the job"
+
+CURRENT_DIR=`pwd`
+
+echo "Final files will be saved to" $CURRENT_DIR
 
 cd $TMPDIR
 
@@ -45,9 +44,29 @@ module load CBI fastqc
 ## Will print information about the version of fastqc being used.
 module list
 
+## Here, I'll want to concatenate any samples spread across lanes (and maybe add a check to see if this is even needed so the time isn't wasted. Also want to delete the initial files so that we don't process them in addition to the concatenated files).
+sampnames=`ls | grep '[.]fastq' | awk -F '_' '{print $1"_"$2}' | uniq`
+for i in $sampnames;
+  do for j in 1 2; 
+     do
+     cat ${i}_*_R${j}_001.fastq.gz > ${i}_R${j}_001_fastq.gz;
+     rm ${i}_*_R${j}_001.fastq.gz ;
+  done; 
+done;
+
 ## Instead of running files ending in fastq, some files will also end in fastq.gz. Therefore, I am creating a variable called `files` that identifies any file in the FASTA_DRECTORY that includes ".fastq", which will include both ".fastq" files and ".fastq.gz" files.
 files=`ls | grep "[.]fastq"` # Gets any file in the directory with fastq in the name.
 
+## I'm trying really hard to get this right... something to come back to.
+#resources=$(qstat -j "$JOB_ID" | grep -F "hard resource_list:" | sed 's/.*: *//')
+#IFS=, read obj1 obj2 obj3 <<< $resources
+#value='mem_free'
+#for i in $obj1 $obj2 $obj3; do
+#	if [[ $i =~ " ${value} " ]]; then
+#		mem1=$(echo $i | cut -d= -f2)
+#	fi
+#done
+#num1="${resources//[!0-9]/}" ## This will pull out the number from my mem_free string...
 
 ## Now that we have the file names, determine where overlaps in *lanes* exist within samples, which may be easier to do if I'm able to pull in a .txt file....
 ## I'm still playing around with how I want to do this... My brain isn't working at its best right now....
@@ -80,10 +99,8 @@ mkdir -p "${BBDUK_DIR}"/"${QualFilt_DIR}"
 mkdir -p "${BBDUK_DIR}"/"${HUMAN_DIR}"
 mkdir -p "${BBDUK_DIR}"/"${TRIMMED_DIR}"
 
-## Possibly useful parameters to look into and determine what should go up at the top.
-
 MEMORY="-Xmx40g"
-PARAMETERS_ADAPT_TRIM="ktrim=r k=23 mink=11 hdist=1" # can also include tbo (trim adapters based on pair overlap detection using BBMerge [which does not require known adapter sequnces]) or tpe (specifies to trim both reads to the same length in the event that an adapter kmer was only detected in one of them)
+PARAMETERS_ADAPT_TRIM="ktrim=r k=23 mink=11 hdist=1 tbo tpe" # can also include tbo (trim adapters based on pair overlap detection using BBMerge [which does not require known adapter sequnces]) or tpe (specifies to trim both reads to the same length in the event that an adapter kmer was only detected in one of them)
 
 ## Current function uses the $files list generated above to ID only the Read1 files, confirms there's a Read2 file, and then continues.
 
@@ -114,9 +131,9 @@ in2="${BBDUK_DIR}"/"${TRIMMED_DIR}"/"${f/_R1/_R2_adapt_trim}" \
 out1="${BBDUK_DIR}"/"${PhiX_DIR}"/"${f/_R1/_R1_remPhiX}" \
 out2="${BBDUK_DIR}"/"${PhiX_DIR}"/"${f/_R1/_R2_remPhiX}" \
 ref=/bbmap/resources/phix174_ill.ref.fa.gz \
-k=31 hdist=1 stats=stats.txt
+k=31 hdist=1 stats="${BBDUK_DIR}"/"${PhiX_DIR}"/phix_stats${f}.txt
 
-echo "Quality Filtering for" $f
+echo "Quality Filtering and Final Quality Histograms for" $f
 ## Quality Filtering/Trimming
 singularity exec ${software_location}/bbtools.img bbduk.sh \
 "${MEMORY}" \
@@ -125,9 +142,10 @@ in1="${BBDUK_DIR}"/"${PhiX_DIR}"/"${f/_R1/_R1_remPhiX}" \
 in2="${BBDUK_DIR}"/"${PhiX_DIR}"/"${f/_R1/_R2_remPhiX}" \
 out1="${BBDUK_DIR}"/"${QualFilt_DIR}"/"${f/_R1/_R1_qTrim}" \
 out2="${BBDUK_DIR}"/"${QualFilt_DIR}"/"${f/_R1/_R2_qTrim}" \
-k=27 hdist=1 qtrim=rl trimq=17 cardinality=t
+k=23 hdist=1 qtrim=rl trimq=15 maq=10 \
+qhist="${BBDUK_DIR}"/"${QualFilt_DIR}"/qhist_${f}.txt
 
-echo "Human Removal for" $f
+echo "Removing Human Sequences for" $f
 singularity exec -B "${software_location}:/mnt" ${software_location}/bbtools.img bbmap.sh \
 "${MEMORY}" \
 threads=$bbduk_threads \
@@ -155,7 +173,7 @@ done
 
 if [[ $NSLOTS -gt 3 ]]; then
 
-# Determines distribution of threads for initial processes, based on number of cores alloted for the process
+# Determines distribution of threads for initial processes, based on number of cores alloted for the submission:
 	let cores=$NSLOTS
 	let fastqc_threads=cores/3
 	let bbduk_threads=cores-fastqc_threads
@@ -171,59 +189,114 @@ else
         run_fastqc
         run_bbtools
 fi 
+#############################################################################
+### FUNCTION TO RUN MIDAS     #####
+#############################################################################
+
 
 ## Set up Code for MIDAS, which I think I'm going to try to parallelize in the same way like I did for QC and BBtools
+## The question, though, is whether activating the MIDAS virtual environment in some way impacts the metaSPAdes run... I would like to just send the command to the virtual environment, instead of opening the virtual environment to support the running of my commands....
+
 run_midas() {
 for f in $files; do
+
 if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
-echo "Running MIDAS"
+echo "Running MIDAS" on "$f"
 
-. ${software_location}/metagenomics_midas2/bin/activate
+source ${software_location}/metagenomics_midas2/bin/activate
 
-run_midas.py species ./MIDAS_$f -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" -t $NSLOTS
-run_midas.py genes ./MIDAS_$f -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/${f/_R1/_R2_clean} -t $NSLOTS
-run_midas.py snps ./MIDAS_$f -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/${f/_R1/_R2_clean} -t $NSLOTS
+run_midas.py species ./MIDAS_results/"${f/001.fastq.gz/_MIDAS}" -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" -t $midas_cores
+run_midas.py genes ./MIDAS_results/"${f/001.fastq.gz/_MIDAS}" -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/${f/_R1/_R2_clean} -t $midas_cores
+run_midas.py snps ./MIDAS_results/"${f/001.fastq.gz/_MIDAS}" -1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" -2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/${f/_R1/_R2_clean} -t $midas_cores
 
-echo "End MIDAS"
 deactivate
+fi
+done
+}
+
+###############################################################################
+###### FUNCTION TO RUN METASPADES        ##########
+###############################################################################
+
+
+
+merge_and_make_contigs() {
+for f in $files; do
+if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
+
+echo "Merging Paired Reads for" $f
+
+singularity exec /wynton/group/lynch/kmccauley/mySoftware/vsearch_bc.img vsearch \
+--fastq_mergepairs "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
+--reverse "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
+--eetabbedout ${f/.fastq.gz/_}stats.txt \
+--fastq_allowmergestagger \
+--fastqout "${BBDUK_DIR}"/"${HUMAN_DIR}"/merged_"${f}" \
+--threads $spades_cores1
+
+
+echo "Running metaSPAdes on" $f "with merged reads using" $spades_cores "core(s)."
+metaspades.py -k 21,33,55,77 \
+--pe1-1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
+--pe1-2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
+--pe1-12 "${BBDUK_DIR}"/"${HUMAN_DIR}"/merged_"${f}" \
+-o metaspades_results/"${f/.fastq.gz/_contig_dat_withmerge}" \
+-t $spades_cores1
+
+fi
+done
+}
+
+just_make_contigs() {
+for f in $files; do
+if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
+
+echo "Running metaSPAdes on" $f "with merged reads using" $spades_cores "core(s)."
+metaspades.py -k 21,33,55,77 \
+--pe1-1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
+--pe1-2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
+-o metaspades_results/"${f/.fastq.gz/_contig_dat_nomerge}" \
+-t $spades_cores2
+
 fi
 done
 }
 
 
 
-## Determine how we want to download our own database.
+############################################
+### RUN MIDAS AND METASPADES IN PARALLEL ###     ###Unsure if this is safe to do.....
+############################################
 
-## Just some points for discussion/thought...
+
+## Determine how we want to download our own database.
 
 # This setting of the PATH variable works:
 export PATH=$PATH:${software_location}/SPAdes-3.11.1-Linux/bin/
 
 ## try spades on the one sample:
 mkdir metaspades_results
+mkdir MIDAS_results
 
-make_contigs() {
-for f in $files; do
-if [[ $f == *"_R1_"* ]] && test -f "${f/_R1/_R2}"; then
 
-## Would I flash-assemble (Elze recommended VSEARCH) here or consider doing that above, after QC but before running MIDAS
-echo "Running metaSPAdes"
-metaspades.py -k 21,33,55,77 \   ## Check for something that allows for combination of the R1 and R2.
--1 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R1_clean}" \
--2 "${BBDUK_DIR}"/"${HUMAN_DIR}"/"${f/_R1/_R2_clean}" \
--o metaspades_results/"${f/_R1/_contig_dat}" \
--t $NSLOTS
-echo "Done with metaSPAdes"
-fi
-done
-}
+## After a test run, it may be best to allot more cores to metaSPAdes -- it takes *WAY* longer to run than MIDAS. This is assuming that it is safe to run the virtual environment in parallel with metaSPAdes....
 
-run_midas
-make_contigs
+let midas_cores=cores
+#let spades_cores1=(cores-midas_cores)/2
+#let spades_cores2=cores-midas_cores-spades_cores1
 
-echo "PIPELINE COMPLETE!!!"
+
+
+run_midas &
+#merge_and_make_contigs &
+#just_make_contigs &
+wait
+
+echo "PIPELINE COMPLETE! Moving files back to" $CURRENT_DIR
+
+rm $files 
 
 ## Adding a job ID and date to the name of the directory that gets saved.
 currdate=`date +%m%d%Y`
-mkdir "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
-mv $TMPDIR/* "$FASTA_DIRECTORY"/metagenomics_results_${currdate}_${JOB_ID}/
+mkdir "$CURRENT_DIR"/metagenomics_results_${currdate}_${JOB_ID}/
+mv ./* "$CURRENT_DIR"/metagenomics_results_${currdate}_${JOB_ID}/
