@@ -15,12 +15,12 @@ FASTA_DIRECTORY=/wynton/group/lynch/kmccauley/Metagenomics_CREW/dyad_mapping_v2/
 cd $FASTA_DIRECTORY
 
 mkdir -p humann3_combined
-for i in */humann2_results/*genefamilies.tsv; do
+for i in */humann3_results/*genefamilies.tsv; do
 id=$(echo $i | cut -d '/' -f1)
 cp $i humann3_combined/${id}_genefamilies.tsv
 done
 
-for i in */humann2_results/*pathabundance.tsv; do
+for i in */humann3_results/*pathabundance.tsv; do
 id=$(echo $i | cut -d '/' -f1)
 cp $i humann3_combined/${id}_pathabundance.tsv
 done

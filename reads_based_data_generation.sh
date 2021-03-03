@@ -50,6 +50,6 @@ singularity exec -B $PWD:$PWD,/wynton/group/lynch/Shared/humann_db/metaphlan:/me
 rm *.gz
 rm -r humann3_results/*_temp
 
-mkdir -p $current_dir/kraken2_humann3_results/${sample1}
-cp -r $TMPDIR/* $current_dir/kraken2_humann3_results/${sample1}
+mkdir -p $current_dir/humann3_results/${sample1}
+cp -r $TMPDIR/* $current_dir/humann3_results/${sample1}
 
