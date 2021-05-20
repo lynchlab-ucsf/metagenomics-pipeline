@@ -8,17 +8,23 @@
 #$ -R y
 
 ## Metagenomics Pipeline
-## Current Version Written by Katie McCauley, 25 Nov 2019 with Ariane Panzer; last revised 16Nov2020
+## Current Version Written by Katie McCauley, 25 Nov 2019 with Ariane Panzer; last revised 02May2021
 
+## Step 1:
+## Check the above information to make sure you have the number of samples you plan to run, cores per sample, etc. Keep run time at 300 hours (it doesn't hurt and mostly helps); memory is also fine -- don't go too much higher
+
+## Step 2:
 # Where do your metagenomics fastq files live? This directory either contains (a) all FASTQ files for your metagenomics or (b) directories of sample data (often what is downloaded directly from BaseSpace)
 ## If (b), you can have other files in the directory of directories, but they cannot be FASTQ files
 
-FASTA_DIRECTORY="/wynton/group/lynch/kmccauley/IMPACC/analysis_files/"
+FASTA_DIRECTORY="/your/fasta/directory/location/here/"
 
 ## Where do you want your data to end up?
-RESULT_DIRECTORY="/wynton/group/lynch/kmccauley/IMPACC/LL2_Pipeline_UpQuality"
+RESULT_DIRECTORY="/where/you/want/your/files/to/end/up/"
 
-
+## Step 3:
+## Now submit to the queue and cross your fingers (and maybe your toes)!
+## qsub array_working_pipeline.sh
 
 
 ######## All variables beyond this point do not need to be set.
@@ -53,8 +59,6 @@ if [[ -z "$TMPDIR" ]]; then
     mkdir -p "$TMPDIR"
     export TMPDIR
 fi
-#TMPDIR="/wynton/group/lynch/kmccauley/IMPACC/TMPDIR/"
-#mkdir -p $TMPDIR
 
 FASTQC_OUT_1="FastQC_Out_1"
 FASTQC_RAW_1="$TMPDIR"
@@ -71,11 +75,10 @@ for i in $sampnames;
   do for j in 1 2;
      do
      cp ${i}_*_R${j}*.fast* $TMPDIR
-#     cat $TMPDIR/${i}_*_R${j}_001.fastq.gz > $TMPDIR/${i}_R${j}_001.fastq.gz
-#     rm -f $TMPDIR/${i}_*_R${j}_001.fastq.gz
+     cat $TMPDIR/${i}_*_R${j}_001.fastq.gz > $TMPDIR/${i}_R${j}_001.fastq.gz
+     rm -f $TMPDIR/${i}_*_R${j}_001.fastq.gz
   done
 done
-## I don't need to concatenate lanes here.
 
 cd $TMPDIR
 

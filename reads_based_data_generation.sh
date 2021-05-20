@@ -24,7 +24,7 @@ echo "Processed Sample is:" $sample1
 
 ## Jump straight into Kraken
 
-db_location=/wynton/group/lynch/Shared/kraken2_db/
+db_location=/wynton/group/lynch/Shared/kraken2_complete/
 current_dir=`pwd`
 if [[ -z "$TMPDIR" ]]; then
   if [[ -d /scratch ]]; then TMPDIR=/scratch/$USER; else TMPDIR=/tmp/$USER; fi
