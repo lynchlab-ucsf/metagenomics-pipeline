@@ -2,13 +2,18 @@
 
 Author: Katie McCauley
 
-Date: May 19, 2021
+Date: July 29, 2021
 
 # Table of Contents
 
 - [Introduction](#introduction)
-  - [Quality Control Steps](#quality-control-steps)
-  - [Running the QC Script](#running-the-qc-script)
+  - [Quality Control](#quality-control)
+    - [QC Methods](#qc-methods)
+    - [Running the QC Script](#running-the-qc-script)
+  - [Reads Based Metagenomics](#reads-based-metagenomics)
+    - [Methods and Included Software](#methods-and-included-software)
+  - [Assembly: Coming Soon!](#assembly:-coming-soon)
+- [Bug Reports and Roadmap](#bug-reports-and-roadmap)
 
 # Introduction
 This document will describe how the metagenomics pipeline is run and give a sense of what is contained within the pipeline itself. This document will encompass the information I provide in the live workshops I've given to date. It will also be a live document which will change as the pipeline changes (the pipeline is not static).
@@ -17,20 +22,42 @@ The pipeline has been built to maximize efficiency as much as possible. This mea
 
 This pipeline has also been validated on RNAseq data. It uses bbmap which is a splice-aware aligner, so both DNA and RNA can be aligned to the human genome and filtered out. Some discussion exists that suggests that bbmap is imperfect, but alas... A future iteration of the pipeline will likely include a second human filtering step that will use bowtie2 for DNA sequences and STAR for RNA. This will likely be another parameter to provide to the script, but we'll get there when we get there.
 
-## Quality Control Steps
+## Quality Control
+
+### QC Methods
 The steps in this section of the pipeline perform the following:
 
-1. Concatenate reads across lanes
+1. Concatenate reads across lanes, if needed
 
-2. Run FastQC
+2. Run FastQC to get quality information about your sequenced data. The settings for quality filtering are a tad bit higher than typically recommended, so there shouldn't be too much of a need to
 
-3. Use bbTools for:
+3. Use [bbTools](https://jgi.doe.gov/data-and-tools/bbtools/) for:
 
-{add additional information about the outputs, etc.}
+  a. Adapter Trimming
 
-## Running the QC Script
+bbTools provides a file containing the most common adapters used in metagenomimcs sequencing, so reads are mapped against that database to identify cutpoints for adapter removal.
 
-As mentioned above, this part is pretty simple. First copy the code to a directory for the project so you have the current working version. Let's say we're working on a project called `myMetagenomics`. If you are on Wynton, you probably already have your sequence data uploaded, so you can start from there or do something like:
+  b. PhiX Removal
+This step checks for the presence of the PhiX genome, which is typically added to the sequencing process in order to increase sequence complexity. It's also a good gut check that the data was sequenced as evenly as expected (if you put in 40% PhiX, you would expect to recover 40% PhiX). In parallel, checking that a sample that is not expected to have PhiX did indeed not have hits to PhiX is great confirmation.
+
+  c. Quality Filtering and Trimming
+
+Current recommended filtering protocols suggest trimming at Q-scores (based on the Phred scale) less than 10. I have modified this to enforce trimming at a quality score of 15 and an average quality of 20. In addition, a read must have a minimum length of 50 after trimming, or else it is discarded. This latter component ensures that the smallest sequence you have is actually rather large (in comparison). Some data I've processed previously resulted in reads with 15 or fewer bases, which ultimately isn't useful.
+
+  d. Human (host) Filtering
+
+Before moving on with microbial profiling, human reads should be discarded (very few metagenomics pipelines suggest maintaining human reads). bbMap is used for this step, which is a splice-aware aligner, meaning that you can apply this step to both metagenomics (DNA) and metatranscriptomics (RNA) data. There is some discussion of how accurate bbMap is in identifying reads to filter, and some reads *do* get by the filter, but a few reads getting by do not impact downstream results.
+
+### Running the QC Script
+
+As previously mentioned, this part is pretty simple. Samples can be read into the pipeline in one of two ways:
+
+(1) A directory of sample-specific directories
+(2) A directory of R1 and R2 sample fastqs
+
+  If you go this latter way, you won't be able to concatenate across lanes too easily -- this is on my roadmap -- so ideally you have just one lane of data when it is stored this way.
+
+First copy the code to a directory for the project so you have the current working version. Let's say we're working on a project called `myMetagenomics`. If you are on Wynton, you probably already have your sequence data uploaded, so you can start from there or do something like:
 
 ```
 ## Make a directory for your study
@@ -77,4 +104,25 @@ The script will figure out how your metagenomics data is stored and determine ho
 
 As the pipeline is running, there will be a .o and .e file for every sample. If you view these files, you can get a sense of progress and general status. All of the verbosity I've built into the pipeline can be explored in the .o files, and the standard output of tools like bbmap can be viewed in the .e files. The .o files are very useful for troubleshooting.
 
-This whole process can be long or short... Who knows... Depends on lots of stuff (proportion of human sequences, read depth, etc), so check in on it occasionally and don't be surprised if you're waiting a couple of days to move on to the next step.
+This whole process can be long or short... Who knows... Depends on lots of stuff (proportion of human sequences, sequence complexity, read depth, etc), so check in on it occasionally and don't be surprised if you're waiting a couple of days to move on to the next step. However, setting up the code as an array *is* still a good thing -- imagine waiting for each of your samples to go through one at a time and one of those samples takes a week alone..... .... ...
+
+## Reads Based Metagenomics
+
+### Methods and Included Software
+
+
+
+### Running Reads Based Analysis
+
+## Assembly: Coming Soon!
+
+# Bug Reports and Roadmap
+
+To submit a bug report, please use this form: https://airtable.com/shrhBdwkZJAQLJ77p
+
+Roadmap:
+- Allow for non-human hosts (mice).
+- For one-dir-of-all-files setup, allow for multiple lanes.
+- Add a second host-removal step based on bowtie2 or STAR, based on DNA vs or RNA.
+- Find out why sometimes reads_based[...] works and sometimes doesn't.
+- Rename scripts so that they make more sense to an outside observer.
