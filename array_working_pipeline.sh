@@ -11,7 +11,7 @@
 ## Current Version Written by Katie McCauley, 25 Nov 2019 with Ariane Panzer; last revised 02May2021
 
 ## Step 1:
-## Check the above information to make sure you have the number of samples you plan to run, cores per sample, etc. Keep run time at 300 hours (it doesn't hurt and mostly helps); memory is also fine -- don't go too much higher
+## Check the above information to make sure you have the number of samples you plan to run (-t 1:30 is 30 samples), cores per sample (-pe smp 10 uses 10 cores), etc. Keep run time (h_rt) at 300 hours (it doesn't hurt and mostly helps); memory (mem_free) is also fine -- don't go too much higher
 
 ## Step 2:
 # Where do your metagenomics fastq files live? This directory either contains (a) all FASTQ files for your metagenomics or (b) directories of sample data (often what is downloaded directly from BaseSpace)
