@@ -24,7 +24,7 @@ RESULT_DIRECTORY="/where/you/want/your/files/to/end/up/"
 
 ## Step 3:
 ## Now submit to the queue and cross your fingers (and maybe your toes)!
-## qsub array_working_pipeline.sh
+## qsub sample_qc_pipeline.sh
 
 
 ######## All variables beyond this point do not need to be set.

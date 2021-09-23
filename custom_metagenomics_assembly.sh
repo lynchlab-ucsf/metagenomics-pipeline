@@ -1,13 +1,13 @@
 #!/bin/bash
 #$ -cwd
 #$ -pe smp 10
-#$ -t 1:3
+#$ -t 1:12
 #$ -l mem_free=10G
 #$ -l h_rt=300:00:00
 #$ -R y
 
-files_dir=/wynton/group/lynch/kmccauley/URECA_assembly_testing/
-results_dir=raw_files
+files_dir=/wynton/group/lynch/kmccauley/PROSE_metagenomics/
+results_dir=metagenomics_results_8100555
 
 
 cd $files_dir
@@ -45,7 +45,7 @@ singularity exec -B $PWD:$PWD $software_dir/qiime.img filter_fasta.py -f meta_sp
 
 singularity exec -B $PWD:$PWD $software_dir/quast.sif metaquast.py --threads $NSLOTS meta_spades/filtered_contigs.fasta --glimmer
 
-module load samtools bedtools2
+module load samtools/1.10 bedtools2
 
 samtools sort -o ${sample}_sorted.bam -@ $NSLOTS ${sample}_results.bam
 samtools index -@ $NSLOTS ${sample}_sorted.bam
@@ -60,19 +60,14 @@ singularity exec -B $PWD:$PWD $software_dir/prokka.img prokka --outdir ${sample}
 
 ## Organize PROKKA files
 ## basically I had created a file with the counts, coverage, gene IDs and other stuff as a summary that I was going to bring together in a second script.
-bash $files_dir/gfftobed.sh ${sample}_prokka/PROKKA_*.gff > ${sample}_prokka/bedfile.bed
+bash $scripts_loc/gfftobed.sh ${sample}_prokka/PROKKA_*.gff > ${sample}_prokka/bedfile.bed
 bedtools coverage -hist -b ${sample}_results.bam -a ${sample}_prokka/bedfile.bed > ${sample}_prokka/${sample}.map.hist
-python3 $files_dir/get_coverage_for_genes.py -i ${sample}_prokka/${sample}.map.hist > ${sample}_prokka/${sample}.coverage
+python3 $scripts_loc/get_coverage_for_genes.py -i ${sample}_prokka/${sample}.map.hist > ${sample}_prokka/${sample}.coverage
 
 bedtools coverage -counts -b ${sample}_results.bam -a ${sample}_prokka/bedfile.bed > ${sample}_prokka/${sample}.counts
-echo -e "ContigID\tTranscripts" > ${sample}_prokka/${sample}_summary.tsv && cut -f1,5 ${sample}_prokka/${sample}.counts >> ${sample}_prokka/${sample}_summary.tsv
+echo -e "ContigID\tSubContigID\tCounts" > ${sample}_prokka/${sample}_summary.tsv && cut -f1,4,5 ${sample}_prokka/${sample}.counts >> ${sample}_prokka/${sample}_summary.tsv
 
-paste -d'\t' ${sample}_prokka/PROKKA_*.tsv ${sample}_prokka/${sample}_summary.tsv > test1.tsv
-paste -d'\t' test1.tsv ${sample}_prokka/${sample}.coverage > ${sample}_prokka/${sample}_sample_level_summary.tsv
-rm test1.tsv
-
-## Make a workable R table:
-Rscript -e "test <- read.table('${sample}_prokka/${sample}_sample_level_summary.tsv', sep='\t', nrow=3, header=T); write.table(test,'${sample}_prokka/${sample}_sample_level_summary_clean.tsv')"
+Rscript $scripts_loc/merge_prokka_info.R ${sample}_prokka/PROKKA_*.tsv ${sample}_prokka/${sample}_summary.tsv ${sample}_prokka/${sample}.coverage $sample
 
 ## Build MAGs using metabat and CONCOCT
 singularity exec -B $PWD:$PWD $software_dir/metabat2.img metabat2 -i meta_spades/filtered_contigs.fasta -o bins/${sample}_metabat -m 1500 --seed 123
@@ -97,21 +92,3 @@ rm *.fastq.gz
 ## Creating directory where results from this will get saved
 mkdir -p $files_dir/results_assembly_${JOB_ID}/$sample
 mv ./* $files_dir/results_assembly_${JOB_ID}/$sample
-
-
-## This is separate, getting functions hopefully by sample?e
-## $anvio anvi-mcg-classifier -p SAMPLES-MERGED/PROFILE.db -c all_contigs.db -O mcg_classifier_res
-
-## Post-run steps (run from command line):
-##Rscript  make_internal_genomes_table.R results_assembly_${JOB_ID}
-## anvio="singularity exec -B $PWD:$PWD,/wynton/group/lynch/Shared/:/mnt/ /wynton/group/lynch/kmccauley/mySoftware/anvio.sif"
-## $anvio anvi-gen-genomes-storage -i internal_genomes.txt -o libsamples-GENOMES.db
-## What actually worked:: $anvio anvi-gen-genomes-storage -e internal_genomes.txt -o libsamples-GENOMES.db
-## $anvio anvi-pan-genome -g libsamples-GENOMES.db --project-name "COVID" --output-dir single_assembly/ --num-threads 15 --mcl-inflation 10 --use-ncbi-blast
-
-## $anvio anvi-display-pan -p single_assembly/COVID-PAN.db -g libsamples-GENOMES.db -P 8010
-
-## $anvio anvi-compute-functional-enrichment -p single_assembly/COVID-PAN.db -g libsamples-GENOMES.db --category status --annotation-source COG20_FUNCTION -o enriched-functions-status.txt --functional-occurrence-table-output COVID-functions-occurrence-frequency.txt
-## $anvio anvi-export-misc-data -p single_assembly/COVID-PAN.db -info.txt
-## I'd like to be able to pull out the COG functions as a txt file, but not sure how to do that yet. Might need synteny? Or just the co-assembly....
-
