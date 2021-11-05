@@ -2,7 +2,7 @@
 
 Author: Katie McCauley
 
-Date: July 29, 2021
+Date: November 5, 2021
 
 # Table of Contents
 
@@ -25,6 +25,7 @@ This pipeline has also been validated on RNAseq data. It uses bbmap which is a s
 ## Quality Control
 
 ### QC Methods
+
 The steps in this section of the pipeline perform the following:
 
 1. Concatenate reads across lanes, if needed
@@ -104,15 +105,37 @@ The script will figure out how your metagenomics data is stored and determine ho
 
 As the pipeline is running, there will be a .o and .e file for every sample. If you view these files, you can get a sense of progress and general status. All of the verbosity I've built into the pipeline can be explored in the .o files, and the standard output of tools like bbmap can be viewed in the .e files. The .o files are very useful for troubleshooting.
 
-This whole process can be long or short... Who knows... Depends on lots of stuff (proportion of human sequences, sequence complexity, read depth, etc), so check in on it occasionally and don't be surprised if you're waiting a couple of days to move on to the next step. However, setting up the code as an array *is* still a good thing -- imagine waiting for each of your samples to go through one at a time and one of those samples takes a week alone..... .... ...
+This whole process can be long or short... Who knows... Depends on lots of stuff (proportion of human sequences, sequence complexity, read depth, etc), so check in on it occasionally and don't be surprised if you're waiting a couple of days to move on to the next step. However, setting up the code as an array *is* still a good thing -- imagine waiting for each of your samples to go through one at a time and one of those samples takes a week alone.
 
 ## Reads Based Metagenomics
 
+Congratulations! You're back!
+
 ### Methods and Included Software
 
+The steps in this portion of the pipeline are two-fold-fold: (1) two softwares, and (2) two sets of code!
 
+The software:
+
+1. Kraken
+
+Kraken assigns taxonomy to your reads using a k-mer based approach in which the software goes through each k-mer, assigns an NCBI-based taxonomy, and then looks at all of the calls across your forward and reverse reads and essentially takes a consensus vote. It will give you the taxonomy that provides the greatest degree of confidence, even if that means providing lower resolution (ie, at the order level instead of at the genus level).
+
+2. HUMAnN 3.0
+
+[HUMAnN 3.0](https://huttenhower.sph.harvard.edu/humann/) is a software designed to predict the conserved function (remember, for most of you this is DNA-based, not RNA-based, so it's measuring functional potential, not actual expression/activity) of your metagenomic data. It uses marker genes and is still...predictive, since it's still looking at a single read essentially in isolation. It will also assign taxonomy to your reads, though it tends to be much more conservative about the types of bacteria present in your samples. Sometimes it can pick up fungi/viruses, most often not.
 
 ### Running Reads Based Analysis
+
+This component needed to be undertaken in two steps. The first is an array-based step, much like the code for Sample QC, since there's no sample dependency to carry out Kraken or the computationally-intensive HUMAnN, so the gains of running it as an array are worthwhile to capitalize on. The script that you will use for this step is the `reads_based_metagenomics.sh` script.
+
+Once Kraken is complete, you can use a 
+
+For the second part 
+
+
+
+### Performing analysis
 
 ## Assembly: Coming Soon!
 
@@ -121,8 +144,8 @@ This whole process can be long or short... Who knows... Depends on lots of stuff
 To submit a bug report, please use this form: https://airtable.com/shrhBdwkZJAQLJ77p
 
 Roadmap:
-- Allow for non-human hosts (mice).
+- Allow for non-human hosts (mice, cat, dog).
 - For one-dir-of-all-files setup, allow for multiple lanes.
 - Add a second host-removal step based on bowtie2 or STAR, based on DNA vs or RNA.
 - Find out why sometimes reads_based[...] works and sometimes doesn't.
-- Rename scripts so that they make more sense to an outside observer.
+- <s>Rename scripts so that they make more sense to an outside observer.</s>
