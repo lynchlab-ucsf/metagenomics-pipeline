@@ -2,15 +2,15 @@
 #$ -cwd
 #$ -pe smp 5
 #$ -l mem_free=10G
-#$ -l h_rt=80:00:00
-#$ -t 1-5
+#$ -l h_rt=300:00:00
+#$ -t 252
 ## #$ -m e
 ## #$ -M kathryn.mccauley@ucsf.edu
 
 ## Where is your QC results directory?
-files_dir=/wynton/group/lynch/kmccauley/URECA_metagenomics/
+files_dir=/wynton/group/lynch/kmccauley/ITN_Metagenomics/
 ## What is the name of the specific directory?
-results_dir=metagenomics_results_113481
+results_dir=metagenomics_results_1021671/
 
 
 
@@ -50,6 +50,6 @@ singularity exec -B $PWD:$PWD,/wynton/group/lynch/Shared/humann_db/metaphlan:/me
 rm *.gz
 rm -r humann3_results/*_temp
 
-mkdir -p $current_dir/humann3_results/${sample1}
-cp -r $TMPDIR/* $current_dir/humann3_results/${sample1}
+mkdir -p $files_dir/readsbased_results_${JOB_ID}/${sample1}
+cp -r $TMPDIR/* $files_dir/readsbased_results_${JOB_ID}/${sample1}
 

@@ -70,7 +70,7 @@ echo -e "ContigID\tSubContigID\tCounts" > ${sample}_prokka/${sample}_summary.tsv
 Rscript $scripts_loc/merge_prokka_info.R ${sample}_prokka/PROKKA_*.tsv ${sample}_prokka/${sample}_summary.tsv ${sample}_prokka/${sample}.coverage $sample
 
 ## Build MAGs using metabat and CONCOCT
-singularity exec -B $PWD:$PWD $software_dir/metabat2.img metabat2 -i meta_spades/filtered_contigs.fasta -o bins/${sample}_metabat -m 1500 --seed 123
+singularity exec -B $PWD:$PWD $software_dir/metabat2.img metabat2 -i meta_spades/filtered_contigs.fasta -o bins/${sample}_metabat -m 1500 --seed 123 --saveCls -t $NSLOTS
 
 singularity exec -B $PWD:$PWD $software_dir/concoct.img cut_up_fasta.py meta_spades/filtered_contigs.fasta -c 10000 -o 0 --merge_last -b contigs_10K.bed > contigs_10K.fa
 singularity exec -B $PWD:$PWD $software_dir/concoct.img concoct_coverage_table.py contigs_10K.bed ${sample}_sorted.bam > coverage_table.tsv
@@ -84,7 +84,7 @@ echo "Not enough contigs pass the threshold filter"
 fi
 
 ### check bins with checkM
-singularity exec -B $PWD:$PWD $software_dir/checkm.img checkm lineage_wf bins/ checkm/ ## Not sure if the no-bin error is fatal to the point where my files don't get returned.
+singularity exec -B $PWD:$PWD $software_dir/checkm.img checkm lineage_wf bins checkm -x .fa -t $NSLOTS
 
 #Remove the initial fastq files
 rm *.fastq.gz
