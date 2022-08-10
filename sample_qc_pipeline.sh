@@ -2,9 +2,8 @@
 #$ -cwd
 #$ -pe smp 10
 #$ -l mem_free=10G
-#$ -t 1:30
+#$ -t 1:262
 #$ -l h_rt=300:00:00
-#$ -m e
 #$ -R y
 
 ## Metagenomics Pipeline
@@ -17,10 +16,10 @@
 # Where do your metagenomics fastq files live? This directory either contains (a) all FASTQ files for your metagenomics or (b) directories of sample data (often what is downloaded directly from BaseSpace)
 ## If (b), you can have other files in the directory of directories, but they cannot be FASTQ files
 
-FASTA_DIRECTORY="/your/fasta/directory/location/here/"
+FASTA_DIRECTORY="/wynton/group/lynch/kmccauley/ITN_Metagenomics/combined_files/"
 
 ## Where do you want your data to end up?
-RESULT_DIRECTORY="/where/you/want/your/files/to/end/up/"
+RESULT_DIRECTORY="/wynton/group/lynch/kmccauley/ITN_Metagenomics/"
 
 ## Step 3:
 ## Now submit to the queue and cross your fingers (and maybe your toes)!
@@ -36,7 +35,6 @@ cd $FASTA_DIRECTORY
 if ls *fastq* &>/dev/null; then
 
 FASTA_LIST=`ls *fastq* | awk 'NR % 2 == 1 {print}'` ## This obtains every other fastq file line in the dataset and gets us what we need.
-echo $FASTA_LIST
 FASTA_FILE=$(echo $FASTA_LIST | cut -d " " -f $SGE_TASK_ID)
 echo $FASTA_FILE;
 
@@ -44,8 +42,6 @@ else
 
 FASTA_LIST=`ls $FASTA_DIRECTORY`
 FASTA_FILE_DIR=$(echo $FASTA_LIST | cut -d " " -f $SGE_TASK_ID)
-echo "Fasta List is:"
-echo $FASTA_LIST
 echo "Fasta File is:"
 echo $FASTA_FILE_DIR
 cd $FASTA_FILE_DIR
@@ -60,7 +56,7 @@ if [[ -z "$TMPDIR" ]]; then
     export TMPDIR
 fi
 
-FASTQC_OUT_1="FastQC_Out_1"
+FASTQC_OUT_1="FastQC_Init"
 FASTQC_RAW_1="$TMPDIR"
 
 echo "Temporary directory is" $TMPDIR ", which will be deleted upon completion of the job"
@@ -70,7 +66,7 @@ echo "Final files will be saved to" $RESULT_DIRECTORY
 echo "Now we are in" $PWD
 
 #This part concatenates lanes as needed.
-sampnames=`echo $FASTA_FILE | awk -F '_' '{print $1}' | uniq`
+sampnames=`echo $FASTA_FILE | awk 'BEGIN{ FS="_S"} {print $1}' | uniq`
 for i in $sampnames;
   do for j in 1 2;
      do
@@ -220,6 +216,20 @@ else
         run_fastqc
         run_bbtools
 fi 
+
+# Perform FastQC of the human-filtered reads to confirm number and quality going into downstream analysis.
+mkdir -p FastQC_Final
+
+for f in bbduk_ReadCleaning_Output/HumanFiltering/*clean*; do
+   echo "Running final FastQC on" $f
+      fastqc \
+         -t $fastqc_threads \
+         $f \
+         --nogroup \
+         --outdir FastQC_Final \
+         --dir "$PWD"
+   echo "Finished running final FastQC on" $f
+done
 
 cd $TMPDIR
 
